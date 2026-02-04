@@ -13,6 +13,36 @@ const FEEDS = [
   { name: 'HackerNews', url: 'https://news.ycombinator.com/rss' }
 ];
 
+const FEED_TIMEOUT_MS = 5000; // 5 seconds per feed
+
+async function fetchWithTimeout(
+  feed: { name: string; url: string },
+  timeoutMs: number = FEED_TIMEOUT_MS
+): Promise<Array<{ source: string; title?: string; link?: string; date: number }>> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Timeout: ${feed.name} took too long`)), timeoutMs)
+  );
+
+  const fetchPromise = parser.parseURL(feed.url).then((res) =>
+    res.items.slice(0, 3).map((item) => {
+      const result: { source: string; title?: string; link?: string; date: number } = {
+        source: feed.name,
+        date: item.pubDate ? new Date(item.pubDate).getTime() : Date.now(),
+      };
+      if (item.title) result.title = item.title;
+      if (item.link) result.link = item.link;
+      return result;
+    })
+  );
+
+  try {
+    return await Promise.race([fetchPromise, timeout]);
+  } catch (e) {
+    console.error(`Feed ${feed.name} failed or timed out:`, e);
+    return [];
+  }
+}
+
 export const handler = async () => {
   const today = new Date().toISOString().split('T')[0];
   const fileKey = `news-cache/${today}.json`;
@@ -35,19 +65,22 @@ export const handler = async () => {
 };
 
 async function aggregateAndStore(key: string) {
-  const feedPromises = FEEDS.map(f => 
-    parser.parseURL(f.url)
-      .then(res => res.items.slice(0, 3).map(item => ({
-        source: f.name,
-        title: item.title,
-        link: item.link,
-        date: item.pubDate ? new Date(item.pubDate).getTime() : Date.now()
-      })))
-      .catch(() => [])
-  );
+  const feedPromises = FEEDS.map((f) => fetchWithTimeout(f));
 
-  const results = await Promise.all(feedPromises);
+  const settled = await Promise.allSettled(feedPromises);
+
+  const results = settled
+    .filter((r): r is PromiseFulfilledResult<Array<{ source: string; title?: string; link?: string; date: number }>> => 
+      r.status === "fulfilled"
+    )
+    .map((r) => r.value);
+
   const news = results.flat().sort((a, b) => b.date - a.date);
+
+  // If ALL feeds fail, don't overwrite cache with empty array
+  if (news.length === 0) {
+    throw new Error("All feeds failed or timed out. Aborting S3 write.");
+  }
 
   // Bake into S3
   await s3.send(new PutObjectCommand({
