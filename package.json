@@ -1,0 +1,23 @@
+{
+  "name": "portfolio-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/aggregator.ts --bundle --minify --platform=node --target=node20 --outfile=dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.982.0",
+    "@types/node": "^25.2.0",
+    "rss-parser": "^3.13.0",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.2"
+  }
+}
