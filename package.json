@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "esbuild src/aggregator.ts --bundle --minify --platform=node --target=node20 --outfile=dist/index.js",
+    "postbuild": "cd dist && zip -r index.zip index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

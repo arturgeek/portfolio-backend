@@ -38,3 +38,35 @@ jobs:
         run: |
           aws s3 sync dist/ s3://$AWS_S3_BUCKET_NAME/backend/ --delete
 
+      - name: Create or update Lambda function
+        env:
+          LAMBDA_FUNCTION_NAME: ${{ secrets.AWS_FEED_LAMBDA_FUNCTION_NAME }}
+          LAMBDA_ROLE_ARN: ${{ secrets.AWS_LAMBDA_ROLE_ARN }}
+        run: |
+          # Check if Lambda exists
+          if aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" 2>/dev/null; then
+            echo "Lambda exists, updating code..."
+            aws lambda update-function-code \
+              --function-name "$LAMBDA_FUNCTION_NAME" \
+              --s3-bucket "$AWS_S3_BUCKET_NAME" \
+              --s3-key backend/index.zip
+            echo "Lambda function code updated successfully"
+          else
+            echo "Lambda does not exist, creating..."
+            if [ -z "$LAMBDA_ROLE_ARN" ]; then
+              echo "Error: AWS_LAMBDA_ROLE_ARN secret is required to create Lambda function"
+              echo "Please add AWS_LAMBDA_ROLE_ARN secret with your Lambda execution role ARN"
+              exit 1
+            fi
+            aws lambda create-function \
+              --function-name "$LAMBDA_FUNCTION_NAME" \
+              --runtime nodejs20.x \
+              --role "$LAMBDA_ROLE_ARN" \
+              --handler index.handler \
+              --code S3Bucket="$AWS_S3_BUCKET_NAME",S3Key=backend/index.zip \
+              --timeout 30 \
+              --memory-size 256 \
+              --description "Portfolio news aggregator Lambda function"
+            echo "Lambda function created successfully"
+          fi
+
